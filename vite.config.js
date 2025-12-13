@@ -28,6 +28,8 @@ function prefetchPlugin() {
 }
 
 export default defineConfig({
+  // Base path for production
+  base: '/',
   plugins: [
     vue(),
     visualizer({ open: true }),
@@ -40,13 +42,14 @@ export default defineConfig({
     }),
 
     // PWA Configuration
-    VitePWA({
+    VitePWA({ 
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Vite Admin Demo',
         short_name: 'ViteAdmin',
-        description: 'Optimized Vite Admin Demo',
+        description: 'Vite Admin Demo with PWA',
         theme_color: '#ffffff',
         icons: [
           {
@@ -60,6 +63,10 @@ export default defineConfig({
             type: 'image/png'
           }
         ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024 // 10MB
       }
     }),
 
@@ -76,17 +83,6 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            // Core Framework: Vue, Router, Pinia, Axios
-            // These rarely change, stable cache
-            if (id.includes('vue') || id.includes('pinia') || id.includes('axios')) {
-              return 'framework';
-            }
-
-            // Heavy UI Libs - Shared
-            if (id.includes('element-plus')) {
-              return 'element-plus';
-            }
-
             // Specific Heavy Libs (Lazy loaded via route usually, but if shared, split out)
             if (id.includes('echarts')) {
               return 'echarts';
@@ -103,8 +99,9 @@ export default defineConfig({
             if (id.includes('mockjs')) {
               return 'mock';
             }
-
-            // Default vendor for everything else
+            
+            // Put everything else into a single vendor chunk to avoid circular dependencies
+            // between framework (vue) and UI libraries (element-plus)
             return 'vendor';
           }
         }
