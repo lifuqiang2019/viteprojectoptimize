@@ -301,7 +301,32 @@ app.listen(4173);
             </div>
         </div>
 
-        <h2>🧪 真实浏览器性能压测 (Puppeteer)</h2>
+        <h2>🧪 阶段一：网络层基准测试 (Node.js)</h2>
+        <p>我们首先编写了 <code>benchmark.js</code> 脚本，对核心资源 <code>vendor.js</code> 进行单纯的网络下载测试，基于 Slow 4G (1.6 Mbps) 环境推算理论加载时间。</p>
+        
+        <div class="metric-card" style="background-color: #282c34; color: #abb2bf; font-family: 'Courier New', monospace;">
+            <div style="border-bottom: 1px solid #4b5263; padding-bottom: 10px; margin-bottom: 10px;">
+                📊 Network Benchmark (10 Requests Average)
+            </div>
+            <div style="margin-bottom: 15px;">
+                <div style="color: #e06c75;">❌ Without Gzip (Before):</div>
+                <div>   Transfer Size: 738.45 kB</div>
+                <div>   Projected Load Time (Slow 4G): 3.61 s</div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <div style="color: #98c379;">✅ With Gzip (After):</div>
+                <div>   Transfer Size: 249.04 kB</div>
+                <div>   Projected Load Time (Slow 4G): 1.22 s</div>
+            </div>
+            <div style="border-top: 1px solid #4b5263; padding-top: 10px;">
+                <div style="color: #61afef; font-weight: bold;">🚀 Improvement:</div>
+                <div>   Size Reduction: 66.3%</div>
+                <div>   Time Saved: 2.39 s</div>
+                <div>   Speedup Factor: 3.0x faster</div>
+            </div>
+        </div>
+
+        <h2>🧪 阶段二：真实浏览器性能压测 (Puppeteer)</h2>
         <p>除了理论计算，我们使用 Puppeteer 模拟真实用户访问，连续请求 10 次页面，测试在 <strong>PWA 缓存 + Gzip</strong> 协同工作下的真实渲染性能。</p>
 
         <div class="metric-card" style="background-color: #282c34; color: #abb2bf; font-family: 'Courier New', monospace;">
@@ -342,6 +367,25 @@ app.listen(4173);
             得益于 PWA (Service Worker) 的缓存机制，在二次访问时，核心资源无需经过网络请求，直接从本地 Cache Storage 读取。<br>
             这使得首屏时间从 <strong>2.8s</strong> 骤降至 <strong>0.13s</strong>，实现了近乎“秒开”的极致体验。
         </p>
+
+        <h2>🛠 如何运行测试</h2>
+        <p>本项目提供了完整的测试脚本，您可以按照以下步骤自行验证优化效果。</p>
+        
+        <h3>1. 启动预览服务器</h3>
+        <p>首先，构建项目并启动支持 Gzip 的预览服务器：</p>
+        <pre>
+npm run build
+npm run preview
+        </pre>
+        <p>服务器将在 <code>http://localhost:4173</code> 启动。</p>
+
+        <h3>2. 运行网络层测试</h3>
+        <p>测试核心 JS 文件的压缩效果及理论下载时间：</p>
+        <pre>npm run test:network</pre>
+
+        <h3>3. 运行浏览器压测</h3>
+        <p>使用 Puppeteer 启动无头浏览器，模拟真实用户访问并测试 PWA 缓存效果：</p>
+        <pre>npm run test:browser</pre>
 
         <table class="comparison-table">
             <thead>
