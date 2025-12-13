@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vite 项目性能优化教程 - Step by Step</title>
+    <title>Vite 项目性能优化教程 - 全流程指南</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
@@ -108,6 +108,12 @@
             border-left: 4px solid #ffc107;
             margin: 20px 0;
         }
+        .code-file {
+            font-weight: bold;
+            color: #0969da;
+            margin-bottom: 5px;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -115,11 +121,22 @@
         <h1>🚀 Vite 项目性能优化实战教程</h1>
         
         <p class="highlight">
-            本教程将基于项目的 <code>main</code> 分支（未优化状态），一步步演示如何通过代码分割（Code Splitting）、资源预加载（Prefetch）、PWA 和 Gzip 压缩将项目优化至 <code>optimization</code> 分支的状态。
+            本教程完整记录了从项目初始状态（白屏时间长、体积大）到最终实现<strong>FCP 2.5s 秒开</strong>的全过程。我们综合运用了代码分割、按需加载、智能预取、PWA 及 Gzip 等多项技术。
         </p>
 
-        <h2>第一步：现状分析 (Baseline)</h2>
-        <p>在优化开始前，我们先对 <code>main</code> 分支进行打包分析。该分支采用默认配置，所有依赖容易被打包进巨大的 Vendor Chunk 中。</p>
+        <h2>第一阶段：诊断与分析 (Diagnosis)</h2>
+        <p>在优化开始前，我们需要知道问题出在哪里。我们使用了 <code>rollup-plugin-visualizer</code> 进行产物分析。</p>
+        
+        <span class="code-file">vite.config.js</span>
+        <pre>
+import { visualizer } from 'rollup-plugin-visualizer'
+
+export default defineConfig({
+  plugins: [
+    visualizer({ open: true }) // 打包后自动打开分析报告
+  ]
+})
+        </pre>
         
         <h3>📦 优化前打包数据</h3>
         <pre>
@@ -127,26 +144,27 @@ dist/assets/index-DYI8jQaA.js        996.79 kB
 dist/assets/Editor-DBvM-qil.js     3,728.53 kB  (巨大!)
 dist/assets/Pdf-DIlTuxTt.js        2,453.35 kB
         </pre>
-        <p><strong>问题：</strong>首页加载时需要下载巨大的 JS 文件，包含了可能暂时用不到的编辑器和图表库代码，导致白屏时间长。</p>
+        <p><strong>诊断结论：</strong>首页加载了并未使用的 Editor 和 PDF 库，且所有第三方依赖混在一起，导致首屏 JS 体积过大，阻塞渲染。</p>
 
-        <h2>第二步：实施代码分割 (ManualChunks)</h2>
+        <h2>第二阶段：体积优化 (Bundle Size Optimization)</h2>
+
+        <h3>1. 实施代码分割 (ManualChunks)</h3>
         <p><span class="step-badge">Step 1</span> 修改 <code>vite.config.js</code>，配置 <code>manualChunks</code> 将大型第三方库拆分。</p>
-
-        <h3>🔧 代码变更</h3>
+        
+        <span class="code-file">vite.config.js</span>
         <pre>
-// vite.config.js
 build: {
   rollupOptions: {
     output: {
       manualChunks(id) {
         if (id.includes('node_modules')) {
-          // 将重型库单独拆包
+          // 将重型库单独拆包，只有访问对应路由时才加载
           if (id.includes('echarts')) return 'echarts';
           if (id.includes('three')) return 'three';
           if (id.includes('monaco-editor')) return 'monaco';
           if (id.includes('vue-pdf-embed')) return 'pdf';
           
-          // 其他依赖合并为 vendor，避免过碎的小文件
+          // 其他依赖合并为 vendor，避免过碎的小文件及循环依赖问题
           return 'vendor';
         }
       }
@@ -154,63 +172,113 @@ build: {
   }
 }
         </pre>
-        <p><strong>效果：</strong> 实现了将 3.7MB 的编辑器代码和 Echarts 代码从主包中剥离，只有访问相关页面时才会加载。</p>
 
-        <h2>第三步：开启资源预加载 (Prefetch)</h2>
-        <p><span class="step-badge">Step 2</span> 编写自定义插件 <code>prefetchPlugin</code>，在空闲时预加载拆分出去的 Chunk。</p>
-
-        <h3>🔧 代码变更</h3>
+        <h3>2. 开启 Tree Shaking (按需引入)</h3>
+        <p><span class="step-badge">Step 2</span> 使用 <code>unplugin-vue-components</code> 和 <code>unplugin-auto-import</code> 实现 Element Plus 的按需引入，移除未使用的组件代码。</p>
+        
+        <span class="code-file">vite.config.js</span>
         <pre>
-// vite.config.js
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+
+plugins: [
+  AutoImport({
+    resolvers: [ElementPlusResolver()],
+  }),
+  Components({
+    resolvers: [ElementPlusResolver()],
+  }),
+]
+        </pre>
+        <p><strong>效果：</strong> Vendor 包体积从 ~1.2MB 进一步降低到 ~756kB。</p>
+
+        <h2>第三阶段：加载体验优化 (Loading Experience)</h2>
+
+        <h3>3. 智能资源预加载 (Delayed Prefetch)</h3>
+        <p><span class="step-badge">Step 3</span> 编写自定义插件，在不影响首屏 LCP 的前提下，预加载后续页面资源。</p>
+        
+        <span class="code-file">vite.config.js (Custom Plugin)</span>
+        <pre>
 function prefetchPlugin() {
   return {
     name: 'vite-plugin-prefetch',
     transformIndexHtml(html, ctx) {
       if (!ctx.bundle) return html;
-      // 自动生成 &lt;link rel="prefetch"&gt; 标签
+      
+      // 筛选出非入口的 chunk (如 echarts, monaco 等)
       const chunks = Object.values(ctx.bundle)
-        .filter(chunk => chunk.fileName.endsWith('.js') || chunk.fileName.endsWith('.css'))
-        .filter(chunk => !chunk.isEntry);
+        .filter(chunk => chunk.fileName.endsWith('.js') && !chunk.isEntry);
         
-      const prefetchTags = chunks
-        .map(chunk => `&lt;link rel="prefetch" href="/${chunk.fileName}" /&gt;`)
-        .join('\n');
-        
-      return html.replace('&lt;/head&gt;', `${prefetchTags}\n&lt;/head&gt;`);
+      const links = chunks.map(c => `<link rel="prefetch" href="/${c.fileName}" />`).join('');
+      
+      // 核心策略：利用 requestIdleCallback + setTimeout 延迟 2s 执行
+      // 确保首屏完全渲染完毕(LCP)后，再利用空闲带宽下载其他资源
+      const script = `
+        <script>
+          window.addEventListener('load', () => {
+            const requestIdleCallback = window.requestIdleCallback || (cb => setTimeout(cb, 2000));
+            requestIdleCallback(() => {
+              setTimeout(() => {
+                // 动态注入 prefetch 标签
+                // ... code to inject links ...
+              }, 2000); 
+            });
+          });
+        </script>
+      `;
+      return html.replace('</body>', `${script}\n</body>`);
     }
   }
 }
         </pre>
-        <p><strong>效果：</strong> 用户在浏览首页时，浏览器会在后台默默下载编辑器和图表库的代码，点击路由切换时实现"秒开"。</p>
 
-        <h2>第四步：启用 PWA 与 Gzip 压缩</h2>
-        <p><span class="step-badge">Step 3</span> 引入 <code>vite-plugin-pwa</code> 和 <code>vite-plugin-compression</code>。</p>
-
-        <h3>🔧 代码变更</h3>
+        <h3>4. 启用 PWA 离线缓存</h3>
+        <p><span class="step-badge">Step 4</span> 引入 <code>vite-plugin-pwa</code>，实现资源缓存，二次访问即时加载。</p>
         <pre>
-// vite.config.js
+VitePWA({ 
+  registerType: 'autoUpdate',
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,ico,png,svg}'], // 缓存所有静态资源
+    maximumFileSizeToCacheInBytes: 10 * 1024 * 1024 // 允许缓存大文件 (如 monaco)
+  }
+})
+        </pre>
+
+        <h2>第四阶段：传输层优化 (Network Optimization)</h2>
+
+        <h3>5. Gzip 压缩与生产环境模拟</h3>
+        <p><span class="step-badge">Step 5</span> 这是让 FCP 达标的关键一步。我们在构建时生成 <code>.gz</code> 文件，并配置服务端支持 Gzip 传输。</p>
+        
+        <span class="code-file">vite.config.js</span>
+        <pre>
+import viteCompression from 'vite-plugin-compression'
+
 plugins: [
-  // ...
   viteCompression({
     algorithm: 'gzip',
-    threshold: 10240 // >10kb 进行压缩
-  }),
-  VitePWA({
-    registerType: 'autoUpdate',
-    workbox: {
-      globPatterns: ['**/*.{js,css,html,ico,png,svg}']
-    }
+    threshold: 10240 // 只压缩 >10kb 的文件
   })
 ]
         </pre>
-        <p><strong>效果：</strong> 
-            <ul>
-                <li><strong>Gzip:</strong> 资源体积减少 60%-70% (如 monaco 从 4MB -> 1MB)。</li>
-                <li><strong>PWA:</strong> 支持离线访问，首屏资源直接从 Cache Storage 读取，极大提升二次加载速度。</li>
-            </ul>
-        </p>
 
-        <h2>🏆 优化成果对比</h2>
+        <p><span class="step-badge">New</span> <strong>Preview Server 配置：</strong> 为了在本地真实模拟生产环境的 Gzip 效果，我们创建了自定义 Server。</p>
+        <span class="code-file">server.js</span>
+        <pre>
+import express from 'express';
+import compression from 'compression';
+
+const app = express();
+// 开启 Gzip 中间件
+app.use(compression());
+// 托管 dist 目录
+app.use(express.static('dist'));
+
+app.listen(4173);
+        </pre>
+        <p>修改 <code>package.json</code>: <code>"preview": "node server.js"</code></p>
+
+        <h2>🏆 最终优化成果对比</h2>
         
         <table class="comparison-table">
             <thead>
@@ -246,7 +314,7 @@ plugins: [
                     <td>立即加载</td>
                     <td>延迟加载</td>
                     <td><strong>延迟加载</strong></td>
-                    <td>不抢占首屏带宽</td>
+                    <td>不抢占首屏带宽，利用空闲时间下载其他路由资源</td>
                 </tr>
                 <tr>
                     <td><strong>Lighthouse LCP</strong></td>
@@ -260,37 +328,9 @@ plugins: [
         </table>
 
         <p class="highlight">
-            <strong>🚀 最终达成 2-3s 目标：</strong><br>
-            通过配置 <strong>Preview Server (Gzip)</strong>，我们确保了本地预览环境与生产环境一致。<br>
-            开启 Gzip 后，核心 Vendor 包从 756kB 减少到 <strong>255kB</strong>。<br>
-            在模拟弱网环境下，下载时间从 ~4s 降低到 ~1.2s，加上解析渲染时间，<strong>FCP 成功控制在 2-3s 范围内</strong>。
-        </p>
-
-        <h3>📊 打包产物结构变化</h3>
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1; border: 1px solid #ddd; padding: 10px;">
-                <h4>Before (Main)</h4>
-                <ul>
-                    <li>📄 index.js (996kB)</li>
-                    <li>📄 Editor.js (3.7MB) <span class="metric-bad">阻塞加载</span></li>
-                </ul>
-            </div>
-            <div style="flex: 1; border: 1px solid #ddd; padding: 10px;">
-                <h4>After (Optimization)</h4>
-                <ul>
-                    <li>📄 index.js (4kB)</li>
-                    <li>📄 vendor.js (1.2MB)</li>
-                    <li>📄 echarts.js (900kB) <span class="metric-good">Lazy + Prefetch</span></li>
-                    <li>📄 monaco.js (4.2MB) <span class="metric-good">Lazy + Prefetch</span></li>
-                </ul>
-            </div>
-        </div>
-
-        <h2>总结</h2>
-        <p>
-            通过本次优化，我们成功解决了大型应用的首屏加载性能瓶颈。
-            <strong>Code Splitting</strong> 降低了首屏载荷，<strong>Prefetch</strong> 保证了后续路由的流畅性，而 <strong>PWA</strong> 和 <strong>Gzip</strong> 则提供了极致的缓存和传输效率。
-            现在，项目已经具备了生产级的高性能表现。
+            <strong>🚀 总结：</strong><br>
+            通过以上全链路优化，我们成功将一个重型 Admin 应用优化到了 <strong>FCP 2.5s</strong> 的水平。<br>
+            我们不仅关注了<strong>首屏加载速度</strong> (Gzip, Tree Shaking, Code Splitting)，也兼顾了<strong>后续路由体验</strong> (Prefetch, PWA)，实现了一个高性能的现代 Web 应用。
         </p>
     </div>
 </body>
