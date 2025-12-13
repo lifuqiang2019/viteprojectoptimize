@@ -4,8 +4,12 @@ import vue from '@vitejs/plugin-vue'
 import { visualizer } from 'rollup-plugin-visualizer'
 import viteCompression from 'vite-plugin-compression'
 import { VitePWA } from 'vite-plugin-pwa'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // Custom plugin to inject prefetch links for async chunks associated with routes
+// Strategy: Delayed Prefetch to avoid LCP impact
 function prefetchPlugin() {
   return {
     name: 'vite-plugin-prefetch',
@@ -13,16 +17,36 @@ function prefetchPlugin() {
       if (!ctx.bundle) return html;
 
       const chunks = Object.values(ctx.bundle)
-        .filter(chunk => chunk.fileName.endsWith('.js') || chunk.fileName.endsWith('.css'));
+        .filter(chunk => chunk.fileName.endsWith('.js') || chunk.fileName.endsWith('.css'))
+        .filter(chunk => !chunk.isEntry);
 
-      // Filter out entry chunk to avoid double loading (browser handles entry)
-      // Prefetch remaining chunks (e.g. from lazy loaded routes)
-      const prefetchTags = chunks
-        .filter(chunk => !chunk.isEntry)
-        .map(chunk => `<link rel="prefetch" href="/${chunk.fileName}" />`)
-        .join('\n    ');
+      // Construct prefetch link tags
+      const links = chunks.map(chunk => {
+        return `<link rel="prefetch" href="/${chunk.fileName}" />`
+      }).join('');
+      
+      // Inject script to append links after load
+      // Using requestIdleCallback for better performance
+      const script = `
+        <script>
+          window.addEventListener('load', () => {
+            const prefetchLinks = '${links}';
+            const requestIdleCallback = window.requestIdleCallback || (cb => setTimeout(cb, 2000));
+            
+            requestIdleCallback(() => {
+              setTimeout(() => {
+                const head = document.getElementsByTagName('head')[0];
+                const div = document.createElement('div');
+                div.innerHTML = prefetchLinks;
+                Array.from(div.children).forEach(link => head.appendChild(link));
+                console.log('Prefetch links injected');
+              }, 2000); // 2s delay after idle to ensure LCP is done
+            });
+          });
+        </script>
+      `;
 
-      return html.replace('</head>', `\n    ${prefetchTags}\n  </head>`);
+      return html.replace('</body>', `${script}\n  </body>`);
     }
   }
 }
@@ -32,6 +56,12 @@ export default defineConfig({
   base: '/',
   plugins: [
     vue(),
+    AutoImport({
+      resolvers: [ElementPlusResolver()],
+    }),
+    Components({
+      resolvers: [ElementPlusResolver()],
+    }),
     visualizer({ open: true }),
 
     // Gzip Compression
