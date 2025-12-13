@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.13.2",
     "dayjs": "^1.11.19",
     "echarts": "^6.0.0",
@@ -26,6 +27,7 @@
     "rollup-plugin-swc3": "^0.12.1",
     "rollup-plugin-visualizer": "^6.0.5",
     "vite": "^7.2.4",
-    "vite-plugin-compression": "^0.5.1"
+    "vite-plugin-compression": "^0.5.1",
+    "vite-plugin-pwa": "^1.2.0"
   }
 }
